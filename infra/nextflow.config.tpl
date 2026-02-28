@@ -9,6 +9,7 @@ process {
 aws {
     region = '${aws_region}'
     batch {
+        cliPath             = '/home/ec2-user/aws-cli/bin/aws'
         maxParallelTransfers = 4
     }
 }

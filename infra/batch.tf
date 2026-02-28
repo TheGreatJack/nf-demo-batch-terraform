@@ -45,6 +45,7 @@ resource "aws_batch_compute_environment" "worker" {
     instance_role       = aws_iam_instance_profile.batch_instance.arn
     subnets             = data.aws_subnets.public.ids
     security_group_ids  = [aws_security_group.batch.id]
+    image_id            = var.worker_ami_id
     tags                = var.tags
   }
 

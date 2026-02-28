@@ -28,3 +28,6 @@ tags = {
   ManagedBy   = "Terraform"
   Environment = "dev"
 }
+
+# Custom worker AMI — build with docker/worker-ami/worker.pkr.hcl first
+# worker_ami_id = "ami-xxxxxxxxxxxxxxxxx"

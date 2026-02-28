@@ -109,3 +109,9 @@ variable "tags" {
     Environment = "dev"
   }
 }
+
+variable "worker_ami_id" {
+  description = "Custom AMI ID for worker compute environment instances (must have AWS CLI at /home/ec2-user/aws-cli/bin/aws). Leave null to use the AWS-managed default."
+  type        = string
+  default     = null
+}

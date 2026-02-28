@@ -31,6 +31,7 @@ Credentials flow: EC2 instance profile → ECS agent → container. No static ke
 - **Terraform** ≥ 1.5 (`conda activate terraform`)
 - **AWS CLI** v2 with SSO profile `affc_prof` configured
 - **Docker** (for building and pushing the head image)
+- **Packer** ≥ 1.9 (for building the custom worker AMI)
 
 Log in to AWS SSO before running Terraform or Docker commands:
 
@@ -61,7 +62,40 @@ terraform apply
 
 ---
 
-## 2. Build & Push Docker Image
+## 2. Build Worker AMI
+
+Worker tasks need the AWS CLI to stage files to/from S3. The default ECS-optimised
+AMI does not bundle the CLI in a path Nextflow can bind-mount into containers, so a
+custom AMI is required. This step only needs to be repeated when you want to update
+the CLI version; the same AMI survives `terraform destroy` / re-apply cycles.
+
+```bash
+cd docker/worker-ami
+
+# Download the Packer Amazon provider plugin (one-time per machine)
+packer init .
+
+# Build (~6 min). micromamba installs AWS CLI v2 into /home/ec2-user/aws-cli
+# with all shared libs (including libz) bundled inside the conda environment.
+AWS_PROFILE=affc_prof packer build worker.pkr.hcl
+# → AMI ID printed at the end, e.g.: ami-0bf22b7b00d741f55
+```
+
+Add the AMI ID to `infra/terraform.tfvars`, then re-apply to update the worker
+Compute Environment:
+
+```bash
+echo 'worker_ami_id = "ami-0abc123..."' >> infra/terraform.tfvars
+cd infra && terraform apply
+```
+
+Nextflow finds the CLI via `cliPath = '/home/ec2-user/aws-cli/bin/aws'` in
+`nextflow.config` and automatically bind-mounts that directory into every worker
+container — no changes to pipeline Docker images required.
+
+---
+
+## 3. Build & Push Docker Image
 
 ```bash
 # Get the full ECR image URI from Terraform output
@@ -86,7 +120,7 @@ docker push "${ECR_REPO}:latest"
 
 ---
 
-## 3. Upload Inputs (optional — skip for smoke test)
+## 4. Upload Inputs (optional — skip for smoke test)
 
 For a custom run with your own FASTQs:
 
@@ -106,7 +140,7 @@ data directly — no upload needed.
 
 ---
 
-## 4. Run Smoke Test
+## 5. Run Smoke Test
 
 The `smoke_test_command` output contains a fully rendered `aws batch submit-job`
 command using the `test,docker` profile:
@@ -124,7 +158,7 @@ eval "$(terraform -chdir=infra output -raw smoke_test_command)"
 
 ---
 
-## 5. Monitor Execution
+## 6. Monitor Execution
 
 **Tail the head job logs:**
 ```bash
@@ -147,7 +181,7 @@ aws batch list-jobs \
 
 ---
 
-## 6. Validate Outputs
+## 7. Validate Outputs
 
 ```bash
 BUCKET=$(terraform -chdir=infra output -raw bucket_name)
@@ -178,7 +212,7 @@ aws s3 cp s3://${BUCKET}/results/test-run/multiqc/multiqc_report.html . --profil
 
 ---
 
-## 7. Cleanup
+## 8. Cleanup
 
 **Empty the S3 bucket first** (required before destroy):
 ```bash
@@ -201,6 +235,8 @@ terraform -chdir=infra destroy
 
 | Issue | Resolution |
 |---|---|
+| Worker tasks fail: `libz.so.1: cannot open shared object file` | Worker containers don't ship zlib. Build the custom worker AMI (step 2) — `micromamba` bundles `libzlib` inside the conda env so it is available when Nextflow bind-mounts the `cliPath` directory |
+| Worker tasks fail: `aws: command not found` | Custom worker AMI not applied. Add `worker_ami_id` to `terraform.tfvars` and run `terraform apply` |
 | `Error: role already exists` on apply | Set `create_batch_service_linked_role = false` in `terraform.tfvars` |
 | Compute environment stuck in `INVALID` | Verify `instance_role` uses the **instance profile ARN** (not the role ARN) — already correct in this config |
 | Perpetual diff on `desired_vcpus` | `lifecycle { ignore_changes }` is already set on both CEs |
