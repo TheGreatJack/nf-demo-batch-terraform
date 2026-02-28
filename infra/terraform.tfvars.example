@@ -1,0 +1,30 @@
+# terraform.tfvars.example
+# Copy to terraform.tfvars and adjust values before running terraform apply.
+# Most defaults in variables.tf are ready to use — only override what you need.
+
+# AWS settings
+aws_region  = "us-east-1"
+aws_profile = "affc_prof"
+
+# Nextflow version (must match the Docker image tag you build and push)
+nextflow_version = "25.10.4"
+
+# Set to false if AWSServiceRoleForBatch already exists in your account
+# (e.g., if you have run Batch before in this account)
+create_batch_service_linked_role = true
+
+# Resource sizing — adjust for your workload
+head_ce_max_vcpus   = 4
+worker_ce_max_vcpus = 256
+head_job_vcpus      = 2
+head_job_memory_mb  = 4096
+
+# Log retention
+log_retention_days = 30
+
+# Tags
+tags = {
+  Project     = "nf-core-demo"
+  ManagedBy   = "Terraform"
+  Environment = "dev"
+}
