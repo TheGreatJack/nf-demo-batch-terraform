@@ -26,6 +26,21 @@ Credentials flow: EC2 instance profile → ECS agent → container. No static ke
 
 ---
 
+## AWS Services
+
+| Service | Role in this deployment |
+|---|---|
+| **AWS Batch** | Two Compute Environments (head + worker), two Job Queues, one Job Definition |
+| **EC2** | Instances launched by Batch; head uses `t3.medium`/`m5.large`, worker uses `optimal` (m5/c5/r5) |
+| **ECR** | Repository `nextflow-head` stores the Nextflow head container image |
+| **ECS** | Managed implicitly by Batch to schedule and run containers on EC2 instances |
+| **S3** | Work bucket for input staging, Nextflow work directory, results, and pipeline config |
+| **IAM** | Batch service-linked role, EC2 instance role + profile, custom orchestrator policy |
+| **CloudWatch Logs** | Log group `/aws/batch/job` captures head and worker job output (30-day retention) |
+| **VPC / Networking** | Default VPC, public subnets (data sources), Security Group with egress-only rules |
+
+---
+
 ## Prerequisites
 
 - **Terraform** ≥ 1.5 (`conda activate terraform`)
