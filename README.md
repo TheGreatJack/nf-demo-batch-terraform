@@ -44,14 +44,14 @@ Credentials flow: EC2 instance profile → ECS agent → container. No static ke
 ## Prerequisites
 
 - **Terraform** ≥ 1.5 (`conda activate terraform`)
-- **AWS CLI** v2 with SSO profile `affc_prof` configured
+- **AWS CLI** v2 with SSO profile `your-aws-profile` configured
 - **Docker** (for building and pushing the head image)
 - **Packer** ≥ 1.9 (for building the custom worker AMI)
 
 Log in to AWS SSO before running Terraform or Docker commands:
 
 ```bash
-aws sso login --profile affc_prof
+aws sso login --profile your-aws-profile
 ```
 
 ---
@@ -92,7 +92,7 @@ packer init .
 
 # Build (~6 min). micromamba installs AWS CLI v2 into /home/ec2-user/aws-cli
 # with all shared libs (including libz) bundled inside the conda environment.
-AWS_PROFILE=affc_prof packer build worker.pkr.hcl
+AWS_PROFILE=your-aws-profile packer build worker.pkr.hcl
 # → AMI ID printed at the end, e.g.: ami-0bf22b7b00d741f55
 ```
 
@@ -116,10 +116,10 @@ container — no changes to pipeline Docker images required.
 # Get the full ECR image URI from Terraform output
 ECR_IMAGE=$(terraform -chdir=infra output -raw ecr_image_uri)
 ECR_REPO=$(terraform -chdir=infra output -raw ecr_repository_url)
-ACCOUNT_ID=$(aws sts get-caller-identity --profile affc_prof --query Account --output text)
+ACCOUNT_ID=$(aws sts get-caller-identity --profile your-aws-profile --query Account --output text)
 
 # Authenticate Docker to ECR
-aws ecr get-login-password --region us-east-1 --profile affc_prof | \
+aws ecr get-login-password --region us-east-1 --profile your-aws-profile | \
   docker login --username AWS --password-stdin \
   "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 
@@ -143,11 +143,11 @@ For a custom run with your own FASTQs:
 BUCKET=$(terraform -chdir=infra output -raw bucket_name)
 
 # Upload samplesheet
-aws s3 cp samplesheet.csv s3://${BUCKET}/inputs/samplesheet.csv --profile affc_prof
+aws s3 cp samplesheet.csv s3://${BUCKET}/inputs/samplesheet.csv --profile your-aws-profile
 
 # Upload FASTQ files
-aws s3 cp sample_R1.fastq.gz s3://${BUCKET}/inputs/ --profile affc_prof
-aws s3 cp sample_R2.fastq.gz s3://${BUCKET}/inputs/ --profile affc_prof
+aws s3 cp sample_R1.fastq.gz s3://${BUCKET}/inputs/ --profile your-aws-profile
+aws s3 cp sample_R2.fastq.gz s3://${BUCKET}/inputs/ --profile your-aws-profile
 ```
 
 The `test` profile (used in the smoke test below) pulls nf-core's public test
@@ -177,13 +177,13 @@ eval "$(terraform -chdir=infra output -raw smoke_test_command)"
 
 **Tail the head job logs:**
 ```bash
-aws logs tail /aws/batch/job --follow --profile affc_prof \
+aws logs tail /aws/batch/job --follow --profile your-aws-profile \
   --log-stream-name-prefix "nextflow-head/"
 ```
 
 **Check head job status:**
 ```bash
-aws batch describe-jobs --jobs <JOB_ID> --profile affc_prof \
+aws batch describe-jobs --jobs <JOB_ID> --profile your-aws-profile \
   --query "jobs[0].{status:status,reason:statusReason}"
 ```
 
@@ -191,7 +191,7 @@ aws batch describe-jobs --jobs <JOB_ID> --profile affc_prof \
 ```bash
 aws batch list-jobs \
   --job-queue nextflow-demo-worker-queue \
-  --job-status RUNNING --profile affc_prof
+  --job-status RUNNING --profile your-aws-profile
 ```
 
 ---
@@ -201,7 +201,7 @@ aws batch list-jobs \
 ```bash
 BUCKET=$(terraform -chdir=infra output -raw bucket_name)
 
-aws s3 ls s3://${BUCKET}/results/test-run/ --recursive --human-readable --profile affc_prof
+aws s3 ls s3://${BUCKET}/results/test-run/ --recursive --human-readable --profile your-aws-profile
 ```
 
 Expected structure:
@@ -222,7 +222,7 @@ results/test-run/
 
 Download the MultiQC report:
 ```bash
-aws s3 cp s3://${BUCKET}/results/test-run/multiqc/multiqc_report.html . --profile affc_prof
+aws s3 cp s3://${BUCKET}/results/test-run/multiqc/multiqc_report.html . --profile your-aws-profile
 ```
 
 ---
@@ -232,7 +232,7 @@ aws s3 cp s3://${BUCKET}/results/test-run/multiqc/multiqc_report.html . --profil
 **Empty the S3 bucket first** (required before destroy):
 ```bash
 BUCKET=$(terraform -chdir=infra output -raw bucket_name)
-aws s3 rm s3://${BUCKET}/ --recursive --profile affc_prof
+aws s3 rm s3://${BUCKET}/ --recursive --profile your-aws-profile
 ```
 
 **Destroy all Terraform-managed resources:**
@@ -257,5 +257,5 @@ terraform -chdir=infra destroy
 | Perpetual diff on `desired_vcpus` | `lifecycle { ignore_changes }` is already set on both CEs |
 | Jobs stuck in `RUNNABLE` | Check security group allows outbound; check subnet has a route to the internet |
 | ECR auth expired | Re-run `aws ecr get-login-password ...` — tokens last 12 hours |
-| SSO token expired | Re-run `aws sso login --profile affc_prof` before long sessions |
+| SSO token expired | Re-run `aws sso login --profile your-aws-profile` before long sessions |
 | S3 bucket not empty on destroy | Run `aws s3 rm s3://<bucket>/ --recursive` before `terraform destroy` |
