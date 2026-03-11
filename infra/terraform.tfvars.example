@@ -7,7 +7,7 @@ aws_region  = "us-east-1"
 aws_profile = "your-aws-profile"
 
 # Nextflow version (must match the Docker image tag you build and push)
-nextflow_version = "25.10.4"
+nextflow_version = "23.10.0"
 
 # Set to false if AWSServiceRoleForBatch already exists in your account
 # (e.g., if you have run Batch before in this account)
@@ -19,6 +19,13 @@ worker_ce_max_vcpus = 256
 head_job_vcpus      = 2
 head_job_memory_mb  = 4096
 
+# Worker disk — increase if pipeline steps run out of local scratch space
+worker_volume_size_gb = 100
+
+# Default pipeline (can be overridden per-job via container-overrides)
+nf_pipeline = "nf-core/demo"
+nf_revision = "1.1.0"
+
 # Log retention
 log_retention_days = 30
 
@@ -28,6 +35,3 @@ tags = {
   ManagedBy   = "Terraform"
   Environment = "dev"
 }
-
-# Custom worker AMI — build with docker/worker-ami/worker.pkr.hcl first
-# worker_ami_id = "ami-xxxxxxxxxxxxxxxxx"

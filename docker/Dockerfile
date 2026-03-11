@@ -1,19 +1,22 @@
 # Nextflow head job container
-# Nextflow 25.10.4 + AWS CLI v2 on Amazon Corretto 21 (Java 21 LTS)
+# Nextflow 23.10.0 + AWS CLI v2 on Amazon Corretto 17 (Java 17 LTS)
 #
 # Build:
-#   docker build -t nextflow-head:25.10.4 .
+#   docker build -t nextflow-head:23.10.0 .
 #
 # Run locally (for testing):
 #   docker run --rm \
+#     -e NF_PIPELINE=nf-core/demo \
+#     -e NF_REVISION=1.1.0 \
 #     -e NF_PROFILE=test,docker \
 #     -e NF_OUTDIR=s3://my-bucket/results/test \
 #     -e NF_WORKDIR=s3://my-bucket/work \
 #     -e NXF_CONFIG_S3=s3://my-bucket/config/nextflow.config \
 #     -e AWS_DEFAULT_REGION=us-east-1 \
-#     nextflow-head:25.10.4
+#     -e NF_EXTRA_ARGS="--max_memory 8.GB --max_cpus 4" \
+#     nextflow-head:23.10.0
 
-FROM amazoncorretto:21-al2023
+FROM amazoncorretto:17-al2023
 
 # Install dependencies
 RUN dnf install -y --allowerasing \
@@ -31,8 +34,8 @@ RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
     && rm -rf /tmp/awscliv2.zip /tmp/aws \
     && aws --version
 
-# Install Nextflow 25.10.4
-ENV NXF_VER=25.10.4
+# Install Nextflow 23.10.0
+ENV NXF_VER=23.10.0
 RUN curl -fsSL https://github.com/nextflow-io/nextflow/releases/download/v${NXF_VER}/nextflow \
         -o /usr/local/bin/nextflow \
     && chmod +x /usr/local/bin/nextflow \

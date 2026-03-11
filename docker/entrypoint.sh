@@ -1,12 +1,15 @@
 #!/bin/bash
-# entrypoint.sh — Nextflow head job for nf-core/demo on AWS Batch
+# entrypoint.sh — Nextflow head job for running any pipeline on AWS Batch
 #
 # Environment variables:
-#   NF_PROFILE       Nextflow profile(s), comma-separated  (default: docker)
-#   NXF_CONFIG_S3    S3 URI of nextflow.config to download (optional)
-#   NF_INPUT         S3 URI of the input samplesheet        (optional; not needed for test profile)
-#   NF_OUTDIR        S3 URI for pipeline outputs            (required)
-#   NF_WORKDIR       S3 URI for Nextflow work directory     (required)
+#   NF_PIPELINE      Nextflow pipeline to run (e.g. nf-core/rnaseq)    (required)
+#   NF_REVISION      Pipeline revision/tag/branch (e.g. 3.14.0)        (optional)
+#   NF_PROFILE       Nextflow profile(s), comma-separated              (default: docker)
+#   NXF_CONFIG_S3    S3 URI of nextflow.config to download              (optional)
+#   NF_INPUT         S3 URI of the input samplesheet                    (optional)
+#   NF_OUTDIR        S3 URI for pipeline outputs                        (required)
+#   NF_WORKDIR       S3 URI for Nextflow work directory                 (required)
+#   NF_EXTRA_ARGS    Additional flags/options appended to the command   (optional)
 
 set -euo pipefail
 
@@ -16,6 +19,7 @@ echo "AWS CLI:  $(aws --version 2>&1)"
 echo "Region:   ${AWS_DEFAULT_REGION:-us-east-1}"
 
 # Validate required variables
+: "${NF_PIPELINE:?NF_PIPELINE must be set (e.g. nf-core/rnaseq)}"
 : "${NF_OUTDIR:?NF_OUTDIR must be set}"
 : "${NF_WORKDIR:?NF_WORKDIR must be set}"
 
@@ -31,15 +35,21 @@ fi
 PROFILE="${NF_PROFILE:-docker}"
 
 NF_CMD=(
-    nextflow run nf-core/demo
-    -r 1.1.0
+    nextflow run "${NF_PIPELINE}"
     -profile "${PROFILE}"
     -work-dir "${NF_WORKDIR}"
     --outdir  "${NF_OUTDIR}"
 )
 
-[ -n "$CONFIG_FLAG" ]       && NF_CMD+=($CONFIG_FLAG)
-[ -n "${NF_INPUT:-}" ]      && NF_CMD+=(--input "${NF_INPUT}")
+[ -n "${NF_REVISION:-}" ]  && NF_CMD+=(-r "${NF_REVISION}")
+[ -n "$CONFIG_FLAG" ]      && NF_CMD+=($CONFIG_FLAG)
+[ -n "${NF_INPUT:-}" ]     && NF_CMD+=(--input "${NF_INPUT}")
+
+# Append any extra user-supplied arguments (split on whitespace)
+if [ -n "${NF_EXTRA_ARGS:-}" ]; then
+    # shellcheck disable=SC2206
+    NF_CMD+=(${NF_EXTRA_ARGS})
+fi
 
 echo "Command: ${NF_CMD[*]}"
 echo "──────────────────────────────────────────────────────────────"

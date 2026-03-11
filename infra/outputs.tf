@@ -41,6 +41,6 @@ output "smoke_test_command" {
       --job-name "nf-demo-test-$(date +%Y%m%d-%H%M%S)" \
       --job-queue ${aws_batch_job_queue.head.name} \
       --job-definition ${aws_batch_job_definition.head.name} \
-      --container-overrides '{"environment":[{"name":"NF_PROFILE","value":"test,docker"},{"name":"NF_OUTDIR","value":"s3://${aws_s3_bucket.pipeline.id}/results/test-run"},{"name":"NF_WORKDIR","value":"s3://${aws_s3_bucket.pipeline.id}/work"}]}'
+      --container-overrides '{"environment":[{"name":"NF_PIPELINE","value":"nf-core/demo"},{"name":"NF_REVISION","value":"1.1.0"},{"name":"NF_PROFILE","value":"test,docker"},{"name":"NF_OUTDIR","value":"s3://${aws_s3_bucket.pipeline.id}/results/test-run"},{"name":"NF_WORKDIR","value":"s3://${aws_s3_bucket.pipeline.id}/work"}]}'
   EOT
 }

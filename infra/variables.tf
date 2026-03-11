@@ -13,7 +13,7 @@ variable "aws_profile" {
 variable "nextflow_version" {
   description = "Nextflow version tag used for the ECR image"
   type        = string
-  default     = "25.10.4"
+  default     = "23.10.0"
 }
 
 variable "head_ce_name" {
@@ -110,8 +110,20 @@ variable "tags" {
   }
 }
 
-variable "worker_ami_id" {
-  description = "Custom AMI ID for worker compute environment instances (must have AWS CLI at /home/ec2-user/aws-cli/bin/aws). Leave null to use the AWS-managed default."
+variable "worker_volume_size_gb" {
+  description = "EBS root volume size in GB for worker instances. Increase if pipeline steps need more local scratch space."
+  type        = number
+  default     = 100
+}
+
+variable "nf_pipeline" {
+  description = "Default Nextflow pipeline to run (e.g. nf-core/demo, nf-core/rnaseq)"
   type        = string
-  default     = null
+  default     = "nf-core/demo"
+}
+
+variable "nf_revision" {
+  description = "Default pipeline revision/tag/branch (leave empty for latest)"
+  type        = string
+  default     = ""
 }

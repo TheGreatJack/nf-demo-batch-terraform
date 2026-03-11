@@ -1,3 +1,20 @@
+# ── Launch template for worker disk sizing ──────────────────────────────────
+resource "aws_launch_template" "worker" {
+  name_prefix = "nf-worker-"
+  tags        = var.tags
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_size           = var.worker_volume_size_gb
+      volume_type           = "gp3"
+      delete_on_termination = true
+      encrypted             = true
+    }
+  }
+}
+
 # ── Head Compute Environment ─────────────────────────────────────────────────
 resource "aws_batch_compute_environment" "head" {
   compute_environment_name = var.head_ce_name
@@ -29,6 +46,8 @@ resource "aws_batch_compute_environment" "head" {
 }
 
 # ── Worker Compute Environment ────────────────────────────────────────────────
+# Uses the default AL2023 ECS-optimized AMI (Docker + AWS CLI v2 included).
+# No custom AMI required — the Packer-built image is no longer needed.
 resource "aws_batch_compute_environment" "worker" {
   compute_environment_name = var.worker_ce_name
   type                     = "MANAGED"
@@ -45,8 +64,12 @@ resource "aws_batch_compute_environment" "worker" {
     instance_role       = aws_iam_instance_profile.batch_instance.arn
     subnets             = data.aws_subnets.public.ids
     security_group_ids  = [aws_security_group.batch.id]
-    image_id            = var.worker_ami_id
     tags                = var.tags
+
+    launch_template {
+      launch_template_id = aws_launch_template.worker.id
+      version            = "$Latest"
+    }
   }
 
   depends_on = [
@@ -100,6 +123,8 @@ resource "aws_batch_job_definition" "head" {
       { name = "NXF_CONFIG_S3", value = local.s3_config_uri },
       { name = "NF_WORKDIR", value = local.s3_workdir_uri },
       { name = "NF_PROFILE", value = "docker" },
+      { name = "NF_PIPELINE", value = var.nf_pipeline },
+      { name = "NF_REVISION", value = var.nf_revision },
     ]
 
     logConfiguration = {
