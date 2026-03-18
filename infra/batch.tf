@@ -49,7 +49,7 @@ resource "aws_batch_compute_environment" "head" {
 # Uses the default AL2023 ECS-optimized AMI (Docker + AWS CLI v2 included).
 # No custom AMI required — the Packer-built image is no longer needed.
 resource "aws_batch_compute_environment" "worker" {
-  compute_environment_name = var.worker_ce_name
+  compute_environment_name_prefix = "${var.worker_ce_name}-"
   type                     = "MANAGED"
   state                    = "ENABLED"
   tags                     = var.tags
@@ -78,7 +78,8 @@ resource "aws_batch_compute_environment" "worker" {
   ]
 
   lifecycle {
-    ignore_changes = [compute_resources[0].desired_vcpus]
+    create_before_destroy = true
+    ignore_changes        = [compute_resources[0].desired_vcpus]
   }
 }
 
