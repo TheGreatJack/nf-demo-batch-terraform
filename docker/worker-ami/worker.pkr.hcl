@@ -24,7 +24,7 @@ source "amazon-ebs" "worker" {
 
   source_ami_filter {
     filters = {
-      name                = "amzn2-ami-ecs-hvm-*-x86_64-ebs"
+      name                = "al2023-ami-ecs-hvm-2023.0.*-kernel-*-x86_64"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -32,9 +32,9 @@ source "amazon-ebs" "worker" {
     owners      = ["amazon"]
   }
 
-  ami_name             = "nextflow-batch-worker-{{timestamp}}"
-  ami_description      = "Amazon Linux 2 ECS-optimized + AWS CLI (conda-bundled) for Nextflow Batch workers"
-  ssh_username         = "ec2-user"
+  ami_name        = "nextflow-batch-worker-al2023-{{timestamp}}"
+  ami_description = "AL2023 ECS-optimized + self-contained AWS CLI v2 at /opt/aws-cli (micromamba) for Nextflow Batch workers"
+  ssh_username    = "ec2-user"
 
   tags = {
     Project   = "nf-core-demo"
@@ -48,23 +48,24 @@ build {
 
   provisioner "shell" {
     inline = [
-      # Install micromamba — a single static C++ binary that replaces the Python-based
-      # conda solver. Much lighter on memory, resolves conda-forge packages without OOM.
-      "curl -L micro.mamba.pm/install.sh | bash",
+      # Install micromamba — single static binary, needs bzip2 for tar extraction.
+      "sudo dnf install -y bzip2 tar",
+      "curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj -C /tmp bin/micromamba",
 
-      # Create a conda environment at the target path with AWS CLI v2 from conda-forge.
-      # conda-forge bundles Python + libz + libssl and all other required libs inside
-      # the env, making it fully self-contained when Nextflow bind-mounts
-      # /home/ec2-user/aws-cli into each worker container.
-      # MAMBA_ROOT_PREFIX is set explicitly because Packer does not source .bashrc.
-      "MAMBA_ROOT_PREFIX=/home/ec2-user/micromamba /home/ec2-user/.local/bin/micromamba create -y -p /home/ec2-user/aws-cli -c conda-forge awscli",
+      # Create a self-contained conda env at /opt/aws-cli with AWS CLI v2.
+      # conda-forge bundles Python, libz, libssl, and all other shared libs
+      # inside the env, so it works when Nextflow bind-mounts it into containers.
+      #
+      # Path: /opt/aws-cli/bin/aws → grandparent /opt/aws-cli → safe for Nextflow
+      # (won't shadow /usr, /usr/local, or any other container path).
+      "sudo /tmp/bin/micromamba create -y -p /opt/aws-cli -c conda-forge awscli",
 
       # Smoke-test
-      "/home/ec2-user/aws-cli/bin/aws --version",
+      "/opt/aws-cli/bin/aws --version",
 
       # Clean up — micromamba binary and package cache are not needed in the AMI
-      "rm -rf /home/ec2-user/micromamba",
-      "rm -f /home/ec2-user/.local/bin/micromamba",
+      "rm -f /tmp/bin/micromamba",
+      "sudo rm -rf /root/micromamba",
     ]
   }
 }

@@ -1,8 +1,10 @@
 # Nextflow on AWS Batch — Terraform Deployment Guide
 
 Run **any** Nextflow pipeline from GitHub on AWS Batch. This branch targets
-**Nextflow 23.10.0** and uses the **Amazon Linux 2023 ECS-optimized AMI** for
-worker instances (Docker + AWS CLI v2 included — no custom AMI build required).
+**Nextflow 23.10.0** and uses a **custom AL2023 ECS-optimized AMI** with a
+self-contained AWS CLI v2 installed via micromamba at `/opt/aws-cli/bin/aws`
+(required because Nextflow bind-mounts the grandparent of `cliPath` into worker
+containers — paths under `/usr` shadow container contents).
 
 ## Architecture
 
@@ -14,7 +16,7 @@ Event / Developer
 ┌─────────────────────────┐   submits worker jobs   ┌──────────────────────────┐
 │  Head Compute Env (EC2) │ ───────────────────────► │  Worker Compute Env (EC2)│
 │  optimal                │                          │  optimal (m5/c5/r5)      │
-│  [nextflow-head image]  │                          │  AL2023 ECS-optimized    │
+│  [nextflow-head image]  │                          │  Custom AL2023 AMI       │
 └─────────────────────────┘                          └──────────────────────────┘
                       ▲  reads / writes S3  ▲
                 ┌─────┴─────────────────────┴─────┐
@@ -35,7 +37,7 @@ Credentials flow: EC2 instance profile → ECS agent → container. No static ke
 | Service | Role in this deployment |
 |---|---|
 | **AWS Batch** | Two Compute Environments (head + worker), two Job Queues, one Job Definition |
-| **EC2** | Instances launched by Batch; worker instances use AL2023 ECS-optimized AMI with configurable disk |
+| **EC2** | Instances launched by Batch; worker instances use a custom AL2023 AMI (Packer-built) with configurable disk |
 | **ECR** | Repository `nextflow-head` stores the Nextflow head container image |
 | **ECS** | Managed implicitly by Batch to schedule and run containers on EC2 instances |
 | **S3** | Work bucket for input staging, Nextflow work directory, results, and pipeline config |
@@ -50,6 +52,7 @@ Credentials flow: EC2 instance profile → ECS agent → container. No static ke
 - **Terraform** ≥ 1.5 (`mamba activate terraform`)
 - **AWS CLI** v2 with SSO profile configured
 - **Docker** (for building and pushing the head image)
+- **Packer** ≥ 1.9 (for building the custom worker AMI)
 
 Log in to AWS SSO before running Terraform or Docker commands:
 
@@ -80,7 +83,39 @@ terraform apply
 
 ---
 
-## 2. Build & Push Docker Image
+## 2. Build Worker AMI
+
+Worker tasks need the AWS CLI to stage files to/from S3. Nextflow bind-mounts the
+grandparent directory of `cliPath` into every worker container — if the CLI lives
+under `/usr`, this shadows critical container binaries. The custom AMI installs a
+fully self-contained AWS CLI (via micromamba) at `/opt/aws-cli/bin/aws`, which is
+safe to mount.
+
+```bash
+cd docker/worker-ami
+
+# Download the Packer Amazon provider plugin (one-time per machine)
+packer init .
+
+# Build (~6 min). micromamba installs AWS CLI v2 + all shared libs at /opt/aws-cli
+AWS_PROFILE=your-aws-profile packer build worker.pkr.hcl
+# → AMI ID printed at the end, e.g.: ami-031fa1e1f97828470
+```
+
+Add the AMI ID to `infra/terraform.tfvars`, then re-apply to update the worker
+Compute Environment:
+
+```bash
+echo 'worker_ami_id = "ami-0abc123..."' >> infra/terraform.tfvars
+cd infra && terraform apply
+```
+
+This step only needs to be repeated when you want to update the CLI version; the
+same AMI survives `terraform destroy` / re-apply cycles.
+
+---
+
+## 3. Build & Push Docker Image
 
 ```bash
 # Get the full ECR image URI from Terraform output
@@ -105,7 +140,7 @@ docker push "${ECR_REPO}:latest"
 
 ---
 
-## 3. Upload Inputs (optional — skip for smoke test)
+## 4. Upload Inputs (optional — skip for smoke test)
 
 For a custom run with your own FASTQs:
 
@@ -125,7 +160,7 @@ data directly — no upload needed.
 
 ---
 
-## 4. Run a Pipeline
+## 5. Run a Pipeline
 
 ### Smoke test (nf-core/demo)
 
@@ -174,7 +209,7 @@ aws batch submit-job \
 
 ---
 
-## 5. Monitor Execution
+## 6. Monitor Execution
 
 **Tail the head job logs:**
 ```bash
@@ -197,7 +232,7 @@ aws batch list-jobs \
 
 ---
 
-## 6. Validate Outputs
+## 7. Validate Outputs
 
 ```bash
 BUCKET=$(terraform -chdir=infra output -raw bucket_name)
@@ -212,7 +247,7 @@ aws s3 cp s3://${BUCKET}/results/test-run/multiqc/multiqc_report.html . --profil
 
 ---
 
-## 7. Cleanup
+## 8. Cleanup
 
 **Empty the S3 bucket first** (required before destroy):
 ```bash
@@ -254,7 +289,9 @@ the larger volume; existing running instances are not affected.
 | Compute environment stuck in `INVALID` | Verify `instance_role` uses the **instance profile ARN** (not the role ARN) — already correct in this config |
 | Perpetual diff on `desired_vcpus` | `lifecycle { ignore_changes }` is already set on both CEs |
 | Jobs stuck in `RUNNABLE` | Check security group allows outbound; check subnet has a route to the internet |
-| Worker tasks fail: `aws: command not found` | Verify `cliPath` in `nextflow.config.tpl` matches the CLI location on the AMI (`/usr/local/bin/aws` for AL2023) |
+| Worker tasks fail: `aws: command not found` | Verify `cliPath` in `nextflow.config.tpl` matches the CLI location on the AMI (`/opt/aws-cli/bin/aws`) |
+| Worker tasks fail: `libz.so.1: cannot open shared object file` | The AWS CLI must be installed via micromamba (not the official installer) so shared libs are bundled. Rebuild the worker AMI with `packer build` |
+| Worker tasks fail: `/usr/local/env-execute: no such file or directory` | `cliPath` is under `/usr/local` or `/usr`, causing Nextflow to shadow container contents. Use the custom AMI with CLI at `/opt/aws-cli` |
 | ECR auth expired | Re-run `aws ecr get-login-password ...` — tokens last 12 hours |
 | SSO token expired | Re-run `aws sso login --profile your-aws-profile` before long sessions |
 | S3 bucket not empty on destroy | Run `aws s3 rm s3://<bucket>/ --recursive` before `terraform destroy` |

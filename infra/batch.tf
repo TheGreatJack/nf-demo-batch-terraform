@@ -46,8 +46,8 @@ resource "aws_batch_compute_environment" "head" {
 }
 
 # ── Worker Compute Environment ────────────────────────────────────────────────
-# Uses the default AL2023 ECS-optimized AMI (Docker + AWS CLI v2 included).
-# No custom AMI required — the Packer-built image is no longer needed.
+# Custom AL2023 ECS-optimized AMI with AWS CLI v2 at /opt/aws-cli/bin/aws.
+# Built with Packer (docker/worker-ami/worker.pkr.hcl).
 resource "aws_batch_compute_environment" "worker" {
   compute_environment_name_prefix = "${var.worker_ce_name}-"
   type                     = "MANAGED"
@@ -64,6 +64,7 @@ resource "aws_batch_compute_environment" "worker" {
     instance_role       = aws_iam_instance_profile.batch_instance.arn
     subnets             = data.aws_subnets.public.ids
     security_group_ids  = [aws_security_group.batch.id]
+    image_id            = var.worker_ami_id
     tags                = var.tags
 
     launch_template {

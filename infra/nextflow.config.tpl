@@ -9,7 +9,7 @@ process {
 aws {
     region = '${aws_region}'
     batch {
-        cliPath             = '/usr/local/bin/aws'
+        cliPath             = '/opt/aws-cli/bin/aws'
         maxParallelTransfers = 4
     }
 }

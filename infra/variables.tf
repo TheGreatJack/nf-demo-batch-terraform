@@ -110,6 +110,12 @@ variable "tags" {
   }
 }
 
+variable "worker_ami_id" {
+  description = "Custom AMI ID for worker instances (AL2023 ECS-optimized + AWS CLI at /opt/aws-cli/bin/aws)"
+  type        = string
+  default     = null
+}
+
 variable "worker_volume_size_gb" {
   description = "EBS root volume size in GB for worker instances. Increase if pipeline steps need more local scratch space."
   type        = number
