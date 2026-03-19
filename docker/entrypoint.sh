@@ -31,11 +31,26 @@ if [ -n "${NXF_CONFIG_S3:-}" ]; then
     CONFIG_FLAG="-c /opt/nextflow.config"
 fi
 
+# ── Download pipeline from S3 if needed ─────────────────────────────────────
+PIPELINE_REF="${NF_PIPELINE}"
+if [[ "${NF_PIPELINE}" == s3://* ]]; then
+    LOCAL_PIPELINE="/opt/pipeline"
+    # If the URI points to a file (e.g. main.nf), download its parent directory
+    if [[ "${NF_PIPELINE}" == *.nf ]]; then
+        S3_PIPELINE_DIR="${NF_PIPELINE%/*}"
+    else
+        S3_PIPELINE_DIR="${NF_PIPELINE%/}"
+    fi
+    echo "Downloading pipeline from ${S3_PIPELINE_DIR} to ${LOCAL_PIPELINE}"
+    aws s3 cp "${S3_PIPELINE_DIR}/" "${LOCAL_PIPELINE}/" --recursive
+    PIPELINE_REF="${LOCAL_PIPELINE}"
+fi
+
 # ── Assemble the nextflow run command ────────────────────────────────────────
 PROFILE="${NF_PROFILE:-docker}"
 
 NF_CMD=(
-    nextflow run "${NF_PIPELINE}"
+    nextflow run "${PIPELINE_REF}"
     -profile "${PROFILE}"
     -work-dir "${NF_WORKDIR}"
     --outdir  "${NF_OUTDIR}"
