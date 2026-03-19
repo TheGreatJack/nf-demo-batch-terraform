@@ -19,31 +19,31 @@ variable "nextflow_version" {
 variable "head_ce_name" {
   description = "Name of the head compute environment"
   type        = string
-  default     = "nextflow-demo-head-ce"
+  default     = "onionomics-head-ce"
 }
 
 variable "worker_ce_name" {
   description = "Name of the worker compute environment"
   type        = string
-  default     = "nextflow-demo-worker-ce"
+  default     = "onionomics-worker-ce"
 }
 
 variable "head_queue_name" {
   description = "Name of the head job queue"
   type        = string
-  default     = "nextflow-demo-head-queue"
+  default     = "onionomics-head-queue"
 }
 
 variable "worker_queue_name" {
   description = "Name of the worker job queue"
   type        = string
-  default     = "nextflow-demo-worker-queue"
+  default     = "onionomics-worker-queue"
 }
 
 variable "job_definition_name" {
   description = "Name of the Batch job definition for the head job"
   type        = string
-  default     = "nextflow-head-job"
+  default     = "onionomics-head-job"
 }
 
 variable "ecr_repository_name" {
@@ -97,7 +97,7 @@ variable "head_job_timeout_seconds" {
 variable "create_batch_service_linked_role" {
   description = "Set to false if the AWSServiceRoleForBatch role already exists in the account"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "tags" {

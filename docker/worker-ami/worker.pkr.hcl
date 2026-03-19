@@ -14,7 +14,7 @@ variable "region" {
 
 variable "profile" {
   type    = string
-  default = "affc_prof"
+  default = null
 }
 
 source "amazon-ebs" "worker" {

@@ -11,7 +11,7 @@ nextflow_version = "23.10.0"
 
 # Set to false if AWSServiceRoleForBatch already exists in your account
 # (e.g., if you have run Batch before in this account)
-create_batch_service_linked_role = true
+create_batch_service_linked_role = false
 
 # Resource sizing — adjust for your workload
 head_ce_max_vcpus   = 4
