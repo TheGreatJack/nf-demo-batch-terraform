@@ -33,6 +33,21 @@ output "nextflow_config_s3_uri" {
   value       = local.s3_config_uri
 }
 
+output "private_subnet_ids" {
+  description = "IDs of the private subnets used by Batch compute environments"
+  value       = aws_subnet.private[*].id
+}
+
+output "nat_gateway_id" {
+  description = "NAT Gateway ID"
+  value       = aws_nat_gateway.main.id
+}
+
+output "s3_endpoint_id" {
+  description = "S3 VPC Gateway Endpoint ID"
+  value       = aws_vpc_endpoint.s3.id
+}
+
 output "smoke_test_command" {
   description = "Copy-paste AWS CLI command to submit a smoke test run"
   value       = <<-EOT

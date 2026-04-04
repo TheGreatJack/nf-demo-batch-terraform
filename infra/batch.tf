@@ -1,7 +1,6 @@
 # ── Launch template for worker disk sizing ──────────────────────────────────
 resource "aws_launch_template" "worker" {
   name_prefix = "nf-worker-"
-  tags        = var.tags
 
   block_device_mappings {
     device_name = "/dev/xvda"
@@ -17,10 +16,9 @@ resource "aws_launch_template" "worker" {
 
 # ── Head Compute Environment ─────────────────────────────────────────────────
 resource "aws_batch_compute_environment" "head" {
-  compute_environment_name = var.head_ce_name
-  type                     = "MANAGED"
-  state                    = "ENABLED"
-  tags                     = var.tags
+  compute_environment_name_prefix = "${var.head_ce_name}-"
+  type                            = "MANAGED"
+  state                           = "ENABLED"
 
   compute_resources {
     type                = "EC2"
@@ -30,7 +28,7 @@ resource "aws_batch_compute_environment" "head" {
     desired_vcpus       = 0
     max_vcpus           = var.head_ce_max_vcpus
     instance_role       = aws_iam_instance_profile.batch_instance.arn
-    subnets             = data.aws_subnets.public.ids
+    subnets             = aws_subnet.private[*].id
     security_group_ids  = [aws_security_group.batch.id]
     tags                = var.tags
   }
@@ -41,7 +39,8 @@ resource "aws_batch_compute_environment" "head" {
   ]
 
   lifecycle {
-    ignore_changes = [compute_resources[0].desired_vcpus]
+    create_before_destroy = true
+    ignore_changes        = [compute_resources[0].desired_vcpus]
   }
 }
 
@@ -52,7 +51,6 @@ resource "aws_batch_compute_environment" "worker" {
   compute_environment_name_prefix = "${var.worker_ce_name}-"
   type                     = "MANAGED"
   state                    = "ENABLED"
-  tags                     = var.tags
 
   compute_resources {
     type                = "EC2"
@@ -62,7 +60,7 @@ resource "aws_batch_compute_environment" "worker" {
     desired_vcpus       = 0
     max_vcpus           = var.worker_ce_max_vcpus
     instance_role       = aws_iam_instance_profile.batch_instance.arn
-    subnets             = data.aws_subnets.public.ids
+    subnets             = aws_subnet.private[*].id
     security_group_ids  = [aws_security_group.batch.id]
     image_id            = var.worker_ami_id
     tags                = var.tags
@@ -80,7 +78,7 @@ resource "aws_batch_compute_environment" "worker" {
 
   lifecycle {
     create_before_destroy = true
-    ignore_changes        = [compute_resources[0].desired_vcpus]
+    ignore_changes        = [compute_resources[0].desired_vcpus, update_policy]
   }
 }
 
@@ -89,7 +87,6 @@ resource "aws_batch_job_queue" "head" {
   name     = var.head_queue_name
   state    = "ENABLED"
   priority = 1
-  tags     = var.tags
 
   compute_environment_order {
     order               = 1
@@ -102,7 +99,6 @@ resource "aws_batch_job_queue" "worker" {
   name     = var.worker_queue_name
   state    = "ENABLED"
   priority = 1
-  tags     = var.tags
 
   compute_environment_order {
     order               = 1
@@ -112,9 +108,9 @@ resource "aws_batch_job_queue" "worker" {
 
 # ── Head Job Definition ───────────────────────────────────────────────────────
 resource "aws_batch_job_definition" "head" {
-  name = var.job_definition_name
-  type = "container"
-  tags = var.tags
+  name           = var.job_definition_name
+  type           = "container"
+  propagate_tags = true
 
   container_properties = jsonencode({
     image  = local.ecr_image_uri

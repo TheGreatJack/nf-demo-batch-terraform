@@ -1,6 +1,5 @@
 resource "aws_s3_bucket" "pipeline" {
   bucket = local.bucket_name
-  tags   = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "pipeline" {
@@ -35,5 +34,4 @@ resource "aws_s3_object" "nextflow_config" {
   key     = "config/nextflow.config"
   content = local.nextflow_config_content
   etag    = md5(local.nextflow_config_content)
-  tags    = var.tags
 }

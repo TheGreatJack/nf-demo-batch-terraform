@@ -2,14 +2,12 @@
 resource "aws_iam_service_linked_role" "batch" {
   count            = var.create_batch_service_linked_role ? 1 : 0
   aws_service_name = "batch.amazonaws.com"
-  tags             = var.tags
 }
 
 # 2. Custom orchestrator policy
 resource "aws_iam_policy" "nextflow_orchestrator" {
   name        = "NextflowOrchestratorPolicy"
   description = "Minimum permissions for the Nextflow head node to orchestrate Batch jobs"
-  tags        = var.tags
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -89,7 +87,6 @@ resource "aws_iam_policy" "nextflow_orchestrator" {
 # 3. EC2 instance role
 resource "aws_iam_role" "batch_instance" {
   name = "NextflowBatchInstanceRole"
-  tags = var.tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -112,11 +109,6 @@ resource "aws_iam_role_policy_attachment" "ecr_read_only" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-resource "aws_iam_role_policy_attachment" "s3_full_access" {
-  role       = aws_iam_role.batch_instance.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-
 resource "aws_iam_role_policy_attachment" "nextflow_orchestrator" {
   role       = aws_iam_role.batch_instance.name
   policy_arn = aws_iam_policy.nextflow_orchestrator.arn
@@ -126,5 +118,4 @@ resource "aws_iam_role_policy_attachment" "nextflow_orchestrator" {
 resource "aws_iam_instance_profile" "batch_instance" {
   name = "NextflowBatchInstanceRole"
   role = aws_iam_role.batch_instance.name
-  tags = var.tags
 }

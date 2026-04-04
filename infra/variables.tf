@@ -101,12 +101,14 @@ variable "create_batch_service_linked_role" {
 }
 
 variable "tags" {
-  description = "Common tags applied to all resources"
+  description = "Common tags applied to all resources via provider default_tags"
   type        = map(string)
   default = {
     Project     = "nf-core-demo"
     ManagedBy   = "Terraform"
     Environment = "dev"
+    Team        = "onionomics"
+    Service     = "nextflow-batch"
   }
 }
 
@@ -120,6 +122,12 @@ variable "worker_volume_size_gb" {
   description = "EBS root volume size in GB for worker instances. Increase if pipeline steps need more local scratch space."
   type        = number
   default     = 100
+}
+
+variable "image_tag_suffix" {
+  description = "Suffix appended to Nextflow version for unique ECR tags (e.g., git short SHA)"
+  type        = string
+  default     = ""
 }
 
 variable "nf_pipeline" {
