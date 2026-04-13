@@ -10,25 +10,37 @@ containers — paths under `/usr` shadow container contents).
 
 ```
 Event / Developer
-     │
-     │ aws batch submit-job  ──►  head queue
-     ▼
-┌─────────────────────────┐   submits worker jobs   ┌──────────────────────────┐
-│  Head Compute Env (EC2) │ ───────────────────────► │  Worker Compute Env (EC2)│
-│  optimal                │                          │  optimal (m5/c5/r5)      │
-│  [nextflow-head image]  │                          │  Custom AL2023 AMI       │
-└─────────────────────────┘                          └──────────────────────────┘
-                      ▲  reads / writes S3  ▲
-                ┌─────┴─────────────────────┴─────┐
-                │  S3 Bucket                       │
-                │  ├── work/                       │
-                │  ├── results/                    │
-                │  ├── inputs/                     │
-                │  └── config/                     │
-                └──────────────────────────────────┘
+     |
+     |  aws batch submit-job  -->  head queue
+     v
++---------------------------+   submits worker jobs   +----------------------------+
+|  Head Compute Env (EC2)   | ----------------------> |  Worker Compute Env (EC2)  |
+|  optimal                  |                         |  optimal (m5/c5/r5)        |
+|  [nextflow-head image]    |                         |  Custom AL2023 AMI         |
++---------------------------+                         +----------------------------+
+            |                                                    |
+            |   Private Subnets (no public IPs)                  |
+            +------- 172.31.96/112/128.0/20 ---------------------+
+                         |                     |
+                    NAT Gateway           S3 VPC Endpoint
+                    (outbound)            (free, no NAT cost)
+                         |
+                    Internet Gateway
+                         |
+                +-----------------+
+                |  S3 Bucket      |
+                |  +-- work/      |
+                |  +-- results/   |
+                |  +-- inputs/    |
+                |  +-- config/    |
+                +-----------------+
+
+State Management:
+  S3 bucket  (onionomics-tfstate-<ACCOUNT>-<REGION>) + DynamoDB lock table
+  Deployed once via bootstrap/ before the main infra.
 ```
 
-Credentials flow: EC2 instance profile → ECS agent → container. No static keys needed.
+Credentials flow: EC2 instance profile -> ECS agent -> container. No static keys needed.
 
 ---
 
@@ -37,24 +49,25 @@ Credentials flow: EC2 instance profile → ECS agent → container. No static ke
 | Service | Role in this deployment |
 |---|---|
 | **AWS Batch** | Two Compute Environments (head + worker), two Job Queues, one Job Definition |
-| **EC2** | Instances launched by Batch; worker instances use a custom AL2023 AMI (Packer-built) with configurable disk |
-| **ECR** | Repository `nextflow-head` stores the Nextflow head container image |
+| **EC2** | Instances launched by Batch in private subnets; worker instances use a custom AL2023 AMI with configurable disk |
+| **ECR** | Repository `nextflow-head` stores the Nextflow head container image (immutable tags) |
 | **ECS** | Managed implicitly by Batch to schedule and run containers on EC2 instances |
 | **S3** | Work bucket for input staging, Nextflow work directory, results, and pipeline config |
-| **IAM** | Batch service-linked role, EC2 instance role + profile, custom orchestrator policy |
+| **IAM** | Batch service-linked role, EC2 instance role + profile, least-privilege orchestrator policy |
 | **CloudWatch Logs** | Log group `/aws/batch/job` captures head and worker job output (30-day retention) |
-| **VPC / Networking** | Default VPC, public subnets (data sources), Security Group with egress-only rules |
+| **VPC / Networking** | Default VPC, 3 private subnets, NAT Gateway (single-AZ), S3 VPC Gateway Endpoint, egress-only Security Group |
+| **DynamoDB** | State-locking table for Terraform remote backend (created by bootstrap) |
 
 ---
 
 ## Prerequisites
 
-- **Terraform** ≥ 1.5 (`mamba activate terraform`)
+- **Terraform** >= 1.5 (`mamba activate terraform`)
 - **AWS CLI** v2 with SSO profile configured
 - **Docker** (for building and pushing the head image)
-- **Packer** ≥ 1.9 (for building the custom worker AMI)
+- **Packer** >= 1.9 (for building the custom worker AMI)
 
-Log in to AWS SSO before running Terraform or Docker commands:
+Log in to AWS SSO before running any commands:
 
 ```bash
 aws sso login --profile your-aws-profile
@@ -62,12 +75,65 @@ aws sso login --profile your-aws-profile
 
 ---
 
+## 0. Bootstrap Remote State (one-time per account)
+
+The main infrastructure uses an S3 backend for Terraform state with DynamoDB
+locking. You must create these resources **before** deploying the infra.
+
+```bash
+cd bootstrap
+
+# Initialise providers
+terraform init
+
+# Apply — creates the S3 state bucket and DynamoDB lock table
+terraform apply -var='aws_profile=your-aws-profile'
+```
+
+This creates:
+- **S3 bucket:** `onionomics-tfstate-<ACCOUNT_ID>-<REGION>` (versioned, encrypted, public access blocked)
+- **DynamoDB table:** `onionomics-tfstate-lock` (PAY_PER_REQUEST)
+
+Note the output values:
+
+```bash
+terraform output
+# state_bucket_name = "onionomics-tfstate-123456789012-us-east-1"
+# lock_table_name   = "onionomics-tfstate-lock"
+```
+
+### Configure the infra backend
+
+Open `infra/main.tf` and update the `backend "s3"` block with your actual values:
+
+```hcl
+backend "s3" {
+  bucket         = "onionomics-tfstate-<YOUR_ACCOUNT_ID>-us-east-1"  # from bootstrap output
+  key            = "batch/terraform.tfstate"
+  region         = "us-east-1"
+  dynamodb_table = "onionomics-tfstate-lock"
+  encrypt        = true
+  profile        = "your-aws-profile"
+}
+```
+
+> **Important:** The bootstrap state itself is stored locally (in
+> `bootstrap/terraform.tfstate`). This file is gitignored but should be backed
+> up or kept on a secure machine. Losing it makes the bootstrap resources
+> harder to manage (though they can be imported).
+
+---
+
 ## 1. Deploy Infrastructure
 
 ```bash
-cd terraform/infra
+cd infra
 
-# Initialise providers
+# Copy the example tfvars file and edit it
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your aws_profile, worker_ami_id, etc.
+
+# Initialise providers and the remote backend
 terraform init
 
 # Preview changes
@@ -99,14 +165,15 @@ packer init .
 
 # Build (~6 min). micromamba installs AWS CLI v2 + all shared libs at /opt/aws-cli
 AWS_PROFILE=your-aws-profile packer build worker.pkr.hcl
-# → AMI ID printed at the end, e.g.: ami-031fa1e1f97828470
+# -> AMI ID printed at the end, e.g.: ami-031fa1e1f97828470
 ```
 
 Add the AMI ID to `infra/terraform.tfvars`, then re-apply to update the worker
 Compute Environment:
 
 ```bash
-echo 'worker_ami_id = "ami-0abc123..."' >> infra/terraform.tfvars
+# In infra/terraform.tfvars, set:
+#   worker_ami_id = "ami-0abc123..."
 cd infra && terraform apply
 ```
 
@@ -133,14 +200,16 @@ docker build -t nextflow-head:23.10.0 docker/
 
 # Tag and push
 docker tag nextflow-head:23.10.0 "${ECR_IMAGE}"
-docker tag nextflow-head:23.10.0 "${ECR_REPO}:latest"
 docker push "${ECR_IMAGE}"
-docker push "${ECR_REPO}:latest"
 ```
+
+> **Note:** ECR image tags are immutable. If you need to push an updated image
+> with the same Nextflow version, use the `image_tag_suffix` variable (e.g.,
+> set it to a git short SHA) to produce a unique tag like `23.10.0-a1b2c3d`.
 
 ---
 
-## 4. Upload Inputs (optional — skip for smoke test)
+## 4. Upload Inputs (optional -- skip for smoke test)
 
 For a custom run with your own FASTQs:
 
@@ -226,7 +295,7 @@ aws batch describe-jobs --jobs <JOB_ID> --profile your-aws-profile \
 **List worker jobs:**
 ```bash
 aws batch list-jobs \
-  --job-queue nextflow-demo-worker-queue \
+  --job-queue onionomics-worker-queue \
   --job-status RUNNING --profile your-aws-profile
 ```
 
@@ -249,15 +318,30 @@ aws s3 cp s3://${BUCKET}/results/test-run/multiqc/multiqc_report.html . --profil
 
 ## 8. Cleanup
 
-**Empty the S3 bucket first** (required before destroy):
+### Destroy the main infrastructure
+
+**Empty the S3 pipeline bucket first** (required before destroy):
 ```bash
 BUCKET=$(terraform -chdir=infra output -raw bucket_name)
 aws s3 rm s3://${BUCKET}/ --recursive --profile your-aws-profile
 ```
 
-**Destroy all Terraform-managed resources:**
+**Destroy all infra resources:**
 ```bash
 terraform -chdir=infra destroy
+```
+
+### Destroy the bootstrap (optional)
+
+Only do this if you are tearing down the entire project and no other Terraform
+configurations share the state bucket.
+
+```bash
+# Empty the state bucket first
+STATE_BUCKET=$(terraform -chdir=bootstrap output -raw state_bucket_name)
+aws s3 rm s3://${STATE_BUCKET}/ --recursive --profile your-aws-profile
+
+terraform -chdir=bootstrap destroy -var='aws_profile=your-aws-profile'
 ```
 
 > **Note:** The `AWSServiceRoleForBatch` service-linked role is excluded from
@@ -281,6 +365,37 @@ the larger volume; existing running instances are not affected.
 
 ---
 
+## Project Structure
+
+```
+terraform/
+  bootstrap/            # One-time remote state setup (S3 + DynamoDB)
+    main.tf             #   State bucket, versioning, encryption, lock table
+    variables.tf        #   aws_region, aws_profile
+    outputs.tf          #   state_bucket_name, lock_table_name
+  infra/                # Main infrastructure
+    main.tf             #   Provider config, S3 backend
+    variables.tf        #   All configurable inputs (19 variables)
+    locals.tf           #   Derived values (account ID, bucket name, ECR URI)
+    data.tf             #   VPC, subnets, availability zones
+    networking.tf       #   Private subnets, NAT gateway, S3 VPC endpoint, SG
+    iam.tf              #   Instance role, orchestrator policy, instance profile
+    batch.tf            #   Compute environments, job queues, job definition
+    ecr.tf              #   ECR repository, lifecycle policy
+    s3.tf               #   Pipeline bucket, nextflow.config upload
+    cloudwatch.tf       #   Log group
+    outputs.tf          #   11 key outputs (bucket, queues, smoke test, etc.)
+    nextflow.config.tpl #   Nextflow config template for Batch executor
+    terraform.tfvars.example
+  docker/
+    Dockerfile          #   Nextflow head image (Corretto 17 + AWS CLI v2)
+    entrypoint.sh       #   Head job orchestration script
+    worker-ami/
+      worker.pkr.hcl    #   Packer build for AL2023 AMI with AWS CLI
+```
+
+---
+
 ## Known Gotchas
 
 | Issue | Resolution |
@@ -288,10 +403,12 @@ the larger volume; existing running instances are not affected.
 | `Error: role already exists` on apply | Set `create_batch_service_linked_role = false` in `terraform.tfvars` |
 | Compute environment stuck in `INVALID` | Verify `instance_role` uses the **instance profile ARN** (not the role ARN) — already correct in this config |
 | Perpetual diff on `desired_vcpus` | `lifecycle { ignore_changes }` is already set on both CEs |
-| Jobs stuck in `RUNNABLE` | Check security group allows outbound; check subnet has a route to the internet |
+| Jobs stuck in `RUNNABLE` | Check NAT gateway is healthy; instances in private subnets need NAT for outbound access (except S3, which uses the VPC endpoint) |
 | Worker tasks fail: `aws: command not found` | Verify `cliPath` in `nextflow.config.tpl` matches the CLI location on the AMI (`/opt/aws-cli/bin/aws`) |
 | Worker tasks fail: `libz.so.1: cannot open shared object file` | The AWS CLI must be installed via micromamba (not the official installer) so shared libs are bundled. Rebuild the worker AMI with `packer build` |
 | Worker tasks fail: `/usr/local/env-execute: no such file or directory` | `cliPath` is under `/usr/local` or `/usr`, causing Nextflow to shadow container contents. Use the custom AMI with CLI at `/opt/aws-cli` |
+| ECR push fails: tag already exists | ECR uses immutable tags. Set `image_tag_suffix` in `terraform.tfvars` to a unique value (e.g., git short SHA) and re-apply |
 | ECR auth expired | Re-run `aws ecr get-login-password ...` — tokens last 12 hours |
 | SSO token expired | Re-run `aws sso login --profile your-aws-profile` before long sessions |
 | S3 bucket not empty on destroy | Run `aws s3 rm s3://<bucket>/ --recursive` before `terraform destroy` |
+| `terraform init` fails on backend | Run bootstrap first (Step 0); ensure the S3 bucket and DynamoDB table exist |
