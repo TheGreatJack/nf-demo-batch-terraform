@@ -37,7 +37,7 @@ PARAMS_FLAG=""
 if [ -n "${NF_PARAMS_S3:-}" ]; then
     echo "Downloading params file from ${NF_PARAMS_S3}"
     aws s3 cp "${NF_PARAMS_S3}" /opt/params.json
-    PARAMS_FLAG="--params-file /opt/params.json"
+    PARAMS_FLAG="-params-file /opt/params.json"
 fi
 
 # ── Download pipeline from S3 if needed ─────────────────────────────────────
