@@ -123,6 +123,7 @@ resource "aws_batch_job_definition" "head" {
       { name = "NF_PROFILE", value = "docker" },
       { name = "NF_PIPELINE", value = var.nf_pipeline },
       { name = "NF_REVISION", value = var.nf_revision },
+      { name = "NF_PARAMS_S3", value = "" },
     ]
 
     logConfiguration = {

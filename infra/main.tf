@@ -5,12 +5,12 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "onionomics-tfstate-399839194195-us-east-1"
-    key            = "batch/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "onionomics-tfstate-lock"
-    encrypt        = true
-    profile        = "affc_prof"
+    bucket        = "onionomics-tfstate-630888660188-us-east-1"
+    key           = "batch/terraform.tfstate"
+    region        = "us-east-1"
+    use_lockfile  = true
+    encrypt       = true
+    profile       = "Florian-sso-profile"
   }
 }
 

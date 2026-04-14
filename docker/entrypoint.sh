@@ -6,6 +6,7 @@
 #   NF_REVISION      Pipeline revision/tag/branch (e.g. 3.14.0)        (optional)
 #   NF_PROFILE       Nextflow profile(s), comma-separated              (default: docker)
 #   NXF_CONFIG_S3    S3 URI of nextflow.config to download              (optional)
+#   NF_PARAMS_S3     S3 URI of a params JSON/YAML file to import        (optional)
 #   NF_INPUT         S3 URI of the input samplesheet                    (optional)
 #   NF_OUTDIR        S3 URI for pipeline outputs                        (required)
 #   NF_WORKDIR       S3 URI for Nextflow work directory                 (required)
@@ -29,6 +30,14 @@ if [ -n "${NXF_CONFIG_S3:-}" ]; then
     echo "Downloading nextflow.config from ${NXF_CONFIG_S3}"
     aws s3 cp "${NXF_CONFIG_S3}" /opt/nextflow.config
     CONFIG_FLAG="-c /opt/nextflow.config"
+fi
+
+# ── Download params file from S3 ─────────────────────────────────────────────
+PARAMS_FLAG=""
+if [ -n "${NF_PARAMS_S3:-}" ]; then
+    echo "Downloading params file from ${NF_PARAMS_S3}"
+    aws s3 cp "${NF_PARAMS_S3}" /opt/params.json
+    PARAMS_FLAG="--params-file /opt/params.json"
 fi
 
 # ── Download pipeline from S3 if needed ─────────────────────────────────────
@@ -58,6 +67,7 @@ NF_CMD=(
 
 [ -n "${NF_REVISION:-}" ]  && NF_CMD+=(-r "${NF_REVISION}")
 [ -n "$CONFIG_FLAG" ]      && NF_CMD+=($CONFIG_FLAG)
+[ -n "$PARAMS_FLAG" ]      && NF_CMD+=($PARAMS_FLAG)
 [ -n "${NF_INPUT:-}" ]     && NF_CMD+=(--input "${NF_INPUT}")
 
 # Append any extra user-supplied arguments (split on whitespace)

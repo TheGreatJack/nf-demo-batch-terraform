@@ -91,7 +91,7 @@ variable "head_job_memory_mb" {
 variable "head_job_timeout_seconds" {
   description = "Timeout in seconds for the head Batch job"
   type        = number
-  default     = 3600
+  default     = 259200 # 72 hours
 }
 
 variable "create_batch_service_linked_role" {
