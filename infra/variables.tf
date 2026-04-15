@@ -73,7 +73,7 @@ variable "head_ce_max_vcpus" {
 variable "worker_ce_max_vcpus" {
   description = "Maximum vCPUs for the worker compute environment"
   type        = number
-  default     = 12
+  default     = 2048 # was 256 in prod before this change
 }
 
 variable "head_job_vcpus" {
