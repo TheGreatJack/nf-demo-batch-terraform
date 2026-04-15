@@ -95,9 +95,9 @@ variable "head_job_timeout_seconds" {
 }
 
 variable "create_batch_service_linked_role" {
-  description = "Set to false if the AWSServiceRoleForBatch role already exists in the account"
+  description = "Set to false if the AWSServiceRoleForBatch role already exists in the account and was not created by this module"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "tags" {
