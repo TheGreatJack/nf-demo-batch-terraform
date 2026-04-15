@@ -19,6 +19,18 @@ echo "Nextflow: $(nextflow -version 2>&1 | head -1)"
 echo "AWS CLI:  $(aws --version 2>&1)"
 echo "Region:   ${AWS_DEFAULT_REGION:-us-east-1}"
 
+echo "Environment variables" 
+echo   "NF_PIPELINE   - ${NF_PIPELINE}"
+echo   "NF_REVISION   - ${NF_REVISION}"
+echo   "NF_PROFILE    - ${NF_PROFILE}"
+echo   "NXF_CONFIG_S3 - ${NXF_CONFIG_S3}"
+echo   "NF_PARAMS_S3  - ${NF_PARAMS_S3}"
+echo   "NF_INPUT      - ${NF_INPUT}"
+echo   "NF_OUTDIR     - ${NF_OUTDIR}"
+echo   "NF_WORKDIR    - ${NF_WORKDIR}"
+echo   "NF_EXTRA_ARGS - ${NF_EXTRA_ARGS}"
+
+
 # Validate required variables
 : "${NF_PIPELINE:?NF_PIPELINE must be set (e.g. nf-core/rnaseq)}"
 : "${NF_OUTDIR:?NF_OUTDIR must be set}"
