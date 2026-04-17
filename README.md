@@ -36,7 +36,7 @@ Event / Developer
                 +-----------------+
 
 State Management:
-  S3 bucket  (onionomics-tfstate-<ACCOUNT>-<REGION>) + DynamoDB lock table
+  S3 bucket  (onionomics-tfstate-<ACCOUNT>-<REGION>) + use_lockfile = true
   Deployed once via bootstrap/ before the main infra.
 ```
 
@@ -108,12 +108,12 @@ Open `infra/main.tf` and update the `backend "s3"` block with your actual values
 
 ```hcl
 backend "s3" {
-  bucket         = "onionomics-tfstate-<YOUR_ACCOUNT_ID>-us-east-1"  # from bootstrap output
-  key            = "batch/terraform.tfstate"
-  region         = "us-east-1"
-  dynamodb_table = "onionomics-tfstate-lock"
-  encrypt        = true
-  profile        = "your-aws-profile"
+  bucket       = "onionomics-tfstate-<YOUR_ACCOUNT_ID>-us-east-1"  # from bootstrap output
+  key          = "batch/terraform.tfstate"
+  region       = "us-east-1"
+  use_lockfile = true
+  encrypt      = true
+  profile      = "your-aws-profile"
 }
 ```
 
@@ -368,30 +368,29 @@ the larger volume; existing running instances are not affected.
 ## Project Structure
 
 ```
-terraform/
-  bootstrap/            # One-time remote state setup (S3 + DynamoDB)
-    main.tf             #   State bucket, versioning, encryption, lock table
-    variables.tf        #   aws_region, aws_profile
-    outputs.tf          #   state_bucket_name, lock_table_name
-  infra/                # Main infrastructure
-    main.tf             #   Provider config, S3 backend
-    variables.tf        #   All configurable inputs (19 variables)
-    locals.tf           #   Derived values (account ID, bucket name, ECR URI)
-    data.tf             #   VPC, subnets, availability zones
-    networking.tf       #   Private subnets, NAT gateway, S3 VPC endpoint, SG
-    iam.tf              #   Instance role, orchestrator policy, instance profile
-    batch.tf            #   Compute environments, job queues, job definition
-    ecr.tf              #   ECR repository, lifecycle policy
-    s3.tf               #   Pipeline bucket, nextflow.config upload
-    cloudwatch.tf       #   Log group
-    outputs.tf          #   11 key outputs (bucket, queues, smoke test, etc.)
-    nextflow.config.tpl #   Nextflow config template for Batch executor
-    terraform.tfvars.example
-  docker/
-    Dockerfile          #   Nextflow head image (Corretto 17 + AWS CLI v2)
-    entrypoint.sh       #   Head job orchestration script
-    worker-ami/
-      worker.pkr.hcl    #   Packer build for AL2023 AMI with AWS CLI
+bootstrap/            # One-time remote state setup (S3 + DynamoDB)
+  main.tf             #   State bucket, versioning, encryption, lock table
+  variables.tf        #   aws_region, aws_profile
+  outputs.tf          #   state_bucket_name, lock_table_name
+infra/                # Main infrastructure
+  main.tf             #   Provider config, S3 backend (use_lockfile = true)
+  variables.tf        #   All configurable inputs (19 variables)
+  locals.tf           #   Derived values (account ID, bucket name, ECR URI)
+  data.tf             #   VPC, subnets, availability zones
+  networking.tf       #   Private subnets, NAT gateway, S3 VPC endpoint, SG
+  iam.tf              #   Instance role, orchestrator policy, instance profile
+  batch.tf            #   Compute environments, job queues, job definition
+  ecr.tf              #   ECR repository, lifecycle policy
+  s3.tf               #   Pipeline bucket, nextflow.config upload
+  cloudwatch.tf       #   Log group
+  outputs.tf          #   11 key outputs (bucket, queues, smoke test, etc.)
+  nextflow.config.tpl #   Nextflow config template for Batch executor
+  terraform.tfvars.example
+docker/
+  Dockerfile          #   Nextflow head image (Corretto 17 + AWS CLI v2)
+  entrypoint.sh       #   Head job orchestration script
+  worker-ami/
+    worker.pkr.hcl    #   Packer build for AL2023 AMI with AWS CLI
 ```
 
 ---
